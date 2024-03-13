@@ -1,36 +1,40 @@
-from rest_framework.serializers import ValidationError
-from datetime import timedelta
+from rest_framework.exceptions import ValidationError
 
 
-def validator_for_habit(value):
-    """ Проверка на правильность заполнения полей привычки """
+class ValidHabit:
+    """
+    Валидация создания/редактирования привычки
+    """
 
-    time = timedelta(minutes=2)
+    def __call__(self, value):
+        pleasant_habit = dict(value).get('is_pleasant')
+        pleasant_habit_associated = dict(value).get('associated_with')
+        reward = dict(value).get('reward')
+        action_time = dict(value).get('action_time')
+        if not action_time:
+            if not pleasant_habit or pleasant_habit_associated or reward:
+                raise ValidationError('Это приятная привычка, с которой связана полезная привычка')
+        elif pleasant_habit_associated and pleasant_habit:
+            raise ValidationError('Приятная привычка не может иметь связанную с ней приятную привычку')
+        elif reward and pleasant_habit:
+            raise ValidationError('Приятная привычка сама уже как награда:)')
+        elif ((not pleasant_habit and reward and pleasant_habit_associated) or
+              (not pleasant_habit and not reward and not pleasant_habit_associated)):
+            raise ValidationError('У полезной привычки может быть либо вознаграждение либо приятная привычка')
+        elif pleasant_habit_associated and not pleasant_habit:
+            if not dict(pleasant_habit_associated).get('is_pleasant'):
+                raise ValidationError('У полезной привычки может быть связанной только приятная привычка')
 
-    try:
-        if value['habit_is_good']:
-            if value['connected_habit']:
-                raise ValidationError('У приятной привычки не может быть связанной привычки')
-            if value['prize']:
-                raise ValidationError('У приятной привычки не может быть вознаграждения.')
-    except KeyError:
-        pass
 
-    try:
-        if value['connected_habit'] and value['prize']:
-            raise ValidationError('Можно выбрать или приятную привычку или вознаграждение')
-    except KeyError:
-        pass
+class ValidPost:
+    """
+    Исключение использования не входящих в привычку полей
+    """
+    def __init__(self, fields: tuple):
+        self.fields = fields
 
-    try:
-        if value['duration'] > time:
-            raise ValidationError('Привычку можно выполнять не более 2 минут')
-    except KeyError:
-        pass
-
-    try:
-        if value['connected_habit']:
-            if not value['connected_habit'].habit_is_good:
-                raise ValidationError('В связанные привычки могут попадать только приятные привычки')
-    except KeyError:
-        pass
+    def __call__(self, value):
+        for field in self.fields:
+            field_value = dict(value).get(field)
+            if field_value:
+                raise ValidationError(f'Поле {field} исключено для этой привычки')
